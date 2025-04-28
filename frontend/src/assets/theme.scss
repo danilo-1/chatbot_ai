@@ -1,0 +1,24 @@
+/* assets/theme.scss */
+:root {
+    --bg‑app  : #f7f9fc;
+    --bg‑card : #ffffff;
+    --txt‑pri : #0f172a;
+    --txt‑sec : #475569;
+    --bubble‑user : #2563eb;
+    --bubble‑ai   : #e2e8f0;
+  }
+  
+  [data-theme="dark"] {
+    --bg‑app  : #0f172a;
+    --bg‑card : #1e293b;
+    --txt‑pri : #f1f5f9;
+    --txt‑sec : #94a3b8;
+    --bubble‑user : #3b82f6;
+    --bubble‑ai   : #334155;
+  }
+  
+  body {
+    background: var(--bg‑app);
+    color: var(--txt‑pri);
+  }
+  

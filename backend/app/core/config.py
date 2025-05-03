@@ -11,6 +11,7 @@ load_dotenv(openai_api_key_path)
 class Settings(BaseSettings):
     openai_api_key: str = Field(..., env="OPENAI_API_KEY", description="OpenAI API Key")
     allowed_origin: str = Field(default="http://localhost:5173", env="ALLOWED_ORIGIN")
+    database_url: str = Field(..., env="DATABASE_URL", description="Database URL")
 
     class Config:
         env_file = str(openai_api_key_path)

@@ -4,7 +4,7 @@ class ProcessService:
     def extrair_dependencias_dos_imports(self, codigo: str) -> list[str]:
         pattern = r"^(?:import|from)\s+([\w\.]+)"
         modulos = re.findall(pattern, codigo, re.MULTILINE)
-        modulos_padroes = ["os", "sys", "re", "json", "time", "datetime", "math", "random"]
+        modulos_padroes = ["os", "sys", "re", "json", "time", "datetime", "math", "random", "platform", "subprocess", "tempfile"]
         return list(set(m for m in modulos if m not in modulos_padroes))
 
     def executar_codigo_docker(self, codigo, pacotes: list[str] = None):

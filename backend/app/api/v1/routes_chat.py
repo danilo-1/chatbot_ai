@@ -3,9 +3,10 @@ from fastapi.responses import StreamingResponse
 from app.schemas.chat import ChatRequest, ChatResponse, HistoryResponse
 from app.schemas.message import Message
 from app.schemas.suggestion import SuggestionRequest, SuggestionResponse
-from app.services.conversation_svc import ConversationService
 from app.services.openai_service import OpenAIService
-from app.deps import get_openai_service, get_conversation_svc
+from app.deps import get_openai_service, get_conversation_service
+from app.db.session import AsyncSession
+from app.services.conversation_svc_db import ConversationServiceDB
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
@@ -13,44 +14,44 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 @router.post("/", response_model=ChatResponse)
 async def chat(req: ChatRequest,
                openai: OpenAIService = Depends(get_openai_service),
-               conv: ConversationService = Depends(get_conversation_svc)):
-    session_id = req.session_id or conv.new_id()
-    history = conv.get(session_id)
-    history.append(Message(role="user", content=req.message))
+               conv_service: AsyncSession = Depends(get_conversation_service)):
+    conversation = None
+    if req.session_id:
+        conversation = await conv_service.get_conversation(req.session_id)
+    if not conversation:
+        conversation = await conv_service.create_conversation(req.session_id)
+    session_id = conversation.session_id
+    # Adiciona a mensagem do usuário
+    await conv_service.add_message(conversation, "user", req.message)
+    # Obtém o histórico (converte os DBMessage para o schema Message)
+    history = [Message(role=m.role, content=m.content) for m in conversation.messages]
+
 
     content = await openai.completion(history, model=req.model)
     answer = content.choices[0].message.content
-    history.append(Message(role="assistant", content=answer))
+    await conv_service.add_message(conversation, "assistant", answer)
 
+    # Atualiza o histórico e retorna a resposta
+    await conv_service.db.refresh(conversation)
+    history = [Message(role=m.role, content=m.content) for m in conversation.messages]
     return ChatResponse(session_id=session_id, response=answer, history=history)
-
-# ---------- Streaming ----------
-@router.post("/stream")
-async def chat_stream(req: ChatRequest,
-                      openai: OpenAIService = Depends(get_openai_service),
-                      conv: ConversationService = Depends(get_conversation_svc)):
-    session_id = req.session_id or conv.new_id()
-    history = conv.get(session_id)
-    history.append(Message(role="user", content=req.message))
-
-    async def gen():
-        async for token in openai.stream_content(history, req.model):
-            yield token
-    return StreamingResponse(gen(), media_type="text/plain")
 
 # ---------- Histórico ----------
 @router.get("/history/{session_id}", response_model=HistoryResponse)
-async def get_history(session_id: str, conv: ConversationService = Depends(get_conversation_svc)):
-    hist = conv.get(session_id)
-    print(hist)
-    if not hist:
+async def get_history(session_id: str, conv_service: AsyncSession = Depends(get_conversation_service)):
+    conversation = await conv_service.get_conversation(session_id)
+    if not conversation:
         raise HTTPException(404, "Sessão não encontrada")
-    return HistoryResponse(session_id=session_id, history=hist)
+    history = [Message(role=m.role, content=m.content) for m in conversation.messages]
+    return HistoryResponse(session_id=session_id, history=history)
 
 @router.delete("/history/{session_id}")
-async def delete_history(session_id: str, conv: ConversationService = Depends(get_conversation_svc)):
-    conv.delete(session_id)
+async def delete_history(session_id: str, conv_service: AsyncSession = Depends(get_conversation_service)):
+    deleted = await conv_service.delete_conversation(session_id)
+    if not deleted:
+        raise HTTPException(404, "Sessão não encontrada")
     return {"detail": f"Sessão {session_id} removida"}
+
 
 # ---------- Sugestões ----------
 @router.post("/suggestion", response_model=SuggestionResponse)
